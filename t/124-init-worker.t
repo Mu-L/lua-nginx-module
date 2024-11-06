@@ -529,6 +529,7 @@ second line received: (?:Date|Server): .*?
 --- no_error_log
 [error]
 --- timeout: 10
+--- skip_eval: 3:$ENV{TEST_NGINX_USE_HTTP3}
 
 
 
@@ -729,8 +730,8 @@ ok
         ';
     }
 --- log_level: error
---- error_log_file: syslog:server=127.0.0.1:12345
---- udp_listen: 12345
+--- error_log_file: syslog:server=127.0.0.1:$TEST_NGINX_RAND_PORT_1
+--- udp_listen: $TEST_NGINX_RAND_PORT_1
 --- udp_query eval: qr/Bad bad bad/
 --- udp_reply: hello
 --- wait: 0.1
@@ -842,6 +843,11 @@ lua close the global Lua VM \3 in the cache helper process \d+
 lua close the global Lua VM \3
 lua close the global Lua VM \3 in the cache helper process \d+
 )(?:lua close the global Lua VM [0-9A-F]+
+|lua close the global Lua VM ([0-9A-F]+)
+lua close the global Lua VM \4 in the cache helper process \d+
+lua close the global Lua VM \4 in the cache helper process \d+
+lua close the global Lua VM \4 
+lua close the global Lua VM \4
 )*\z/
 --- no_error_log
 [error]
@@ -1022,6 +1028,6 @@ no_such_error_log
 --- response_body
 hello world
 --- error_log eval
-qr|init_worker_by_lua_file error: .*lua-nginx-module/t/servroot/html/init.lua:3: '\)' expected \(to close '\(' at line 2\) near 'ngx'|
+qr|init_worker_by_lua_file error: .*?t/servroot\w*/html/init.lua:3: '\)' expected \(to close '\(' at line 2\) near 'ngx'|
 --- no_error_log
 no_such_error_log

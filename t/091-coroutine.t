@@ -159,6 +159,8 @@ cc3: 2
 
 
 === TEST 3: basic coroutine and cosocket
+access the public network is unstable, need a bigger timeout 
+--- quic_max_idle_timeout: 4
 --- config
     resolver $TEST_NGINX_RESOLVER ipv6=off;
     location /lua {
@@ -760,6 +762,8 @@ GET /lua
 --- ignore_response
 --- error_log
 API disabled in the context of header_filter_by_lua*
+--- curl_error eval
+qr/curl: \(52\) Empty reply from server|curl: \(92\) HTTP\/2 stream 1 was not closed cleanly|curl: \(95\) HTTP\/3 stream 0 reset by server/
 
 
 
@@ -1419,6 +1423,7 @@ GET /t
 
 
 === TEST 35: coroutine.wrap runtime errors do not log errors
+--- no_http2
 --- config
     location = /t {
         content_by_lua_block {
@@ -1695,6 +1700,8 @@ GET /t
     "stack traceback:",
     "in function 'co'"
 ]
+--- curl_error eval
+qr/curl: \(52\) Empty reply from server|curl: \(92\) HTTP\/2 stream 1 was not closed cleanly|curl: \(95\) HTTP\/3 stream 0 reset by server/
 
 
 

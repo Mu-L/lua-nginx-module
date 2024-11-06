@@ -70,7 +70,7 @@ __DATA__
 
     location /t {
         content_by_lua_block {
-            -- avoid flushing google in "check leak" testing mode:
+            -- avoid flushing bing in "check leak" testing mode:
             local counter = package.loaded.counter
             if not counter then
                 counter = 1

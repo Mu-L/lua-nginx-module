@@ -17,8 +17,8 @@ Production ready.
 = Version =
 
 This document describes ngx_lua
-[https://github.com/openresty/lua-nginx-module/tags v0.10.19], which was released
-on 3 Nov, 2020.
+[https://github.com/openresty/lua-nginx-module/tags v0.10.25], which was released
+on 19 June 2023.
 
 = Videos =
 
@@ -2288,6 +2288,26 @@ When a relative path like <code>foo/bar.lua</code> is given, they will be turned
 
 This directive was first introduced in the <code>v0.10.0</code> release.
 
+== balancer_keepalive ==
+
+'''syntax:''' ''balancer_keepalive <total-connections>''
+
+'''context:''' ''upstream''
+
+'''phase:''' ''loading-config''
+
+The <code>total-connections</code> parameter sets the maximum number of idle
+keepalive connections to upstream servers that are preserved in the cache of
+each worker process. When this number is exceeded, the least recently used
+connections are closed.
+
+It should be particularly noted that the keepalive directive does not limit the
+total number of connections to upstream servers that an nginx worker process
+can open. The connections parameter should be set to a number small enough to
+let upstream servers process new incoming connections as well.
+
+This directive was first introduced in the <code>v0.10.21</code> release.
+
 == lua_need_request_body ==
 
 '''syntax:''' ''lua_need_request_body <on|off>''
@@ -2845,11 +2865,43 @@ The support for the <code>TLSv1.3</code> parameter requires version <code>v0.10.
 
 This directive was first introduced in the <code>v0.9.11</code> release.
 
+== lua_ssl_certificate ==
+
+'''syntax:''' ''lua_ssl_certificate <file>''
+
+'''default:''' ''none''
+
+'''context:''' ''http, server, location''
+
+Specifies the file path to the SSL/TLS certificate in PEM format used for the [[#tcpsock:sslhandshake|tcpsock:sslhandshake]] method.
+
+This directive allows you to specify the SSL/TLS certificate that will be presented to server during the SSL/TLS handshake process.
+
+This directive was first introduced in the <code>v0.10.26</code> release.
+
+See also [[#lua_ssl_certificate_key|lua_ssl_certificate_key]] and [[#lua_ssl_verify_depth|lua_ssl_verify_depth]].
+
+== lua_ssl_certificate_key ==
+
+'''syntax:''' ''lua_ssl_certificate_key <file>''
+
+'''default:''' ''none''
+
+'''context:''' ''http, server, location''
+
+Specifies the file path to the private key associated with the SSL/TLS certificate used in the [[#tcpsock:sslhandshake|tcpsock:sslhandshake]] method.
+
+This directive allows you to specify the private key file corresponding to the SSL/TLS certificate specified by lua_ssl_certificate. The private key should be in PEM format and must match the certificate.
+
+This directive was first introduced in the <code>v0.10.26</code> release.
+
+See also [[#lua_ssl_certificate|lua_ssl_certificate]] and [[#lua_ssl_verify_depth|lua_ssl_verify_depth]].
+
 == lua_ssl_trusted_certificate ==
 
 '''syntax:''' ''lua_ssl_trusted_certificate <file>''
 
-'''default:''' ''no''
+'''default:''' ''none''
 
 '''context:''' ''http, server, location''
 
@@ -2871,7 +2923,7 @@ Sets the verification depth in the server certificates chain.
 
 This directive was first introduced in the <code>v0.9.11</code> release.
 
-See also [[#lua_ssl_trusted_certificate|lua_ssl_trusted_certificate]].
+See also [[#lua_ssl_certificate|lua_ssl_certificate]], [[#lua_ssl_certificate_key|lua_ssl_certificate_key]] and [[#lua_ssl_trusted_certificate|lua_ssl_trusted_certificate]].
 
 == lua_ssl_conf_command ==
 
@@ -3387,7 +3439,7 @@ Because HTTP request is created after SSL handshake, the <code>ngx.ctx</code> cr
 in [[#ssl_certificate_by_lua|ssl_certificate_by_lua*]], [[#ssl_session_store_by_lua|ssl_session_store_by_lua*]], [[#ssl_session_fetch_by_lua|ssl_session_fetch_by_lua*]] and [[#ssl_client_hello_by_lua|ssl_client_hello_by_lua*]]
 is not available in the following phases like [[#rewrite_by_lua|rewrite_by_lua*]].
 
-Since <code>dev</code>, the <code>ngx.ctx</code> created during a SSL handshake
+Since <code>v0.10.18</code>, the <code>ngx.ctx</code> created during a SSL handshake
 will be inherited by the requests which share the same TCP connection established by the handshake.
 Note that overwrite values in <code>ngx.ctx</code> in the http request phases (like `rewrite_by_lua*`) will only take affect in the current http request.
 
@@ -4555,11 +4607,13 @@ See also [[#ngx.req.read_body|ngx.req.read_body]].
 
 == ngx.req.get_body_data ==
 
-'''syntax:''' ''data = ngx.req.get_body_data()''
+'''syntax:''' ''data = ngx.req.get_body_data(max_bytes?)''
 
 '''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*, log_by_lua*''
 
 Retrieves in-memory request body data. It returns a Lua string rather than a Lua table holding all the parsed query arguments. Use the [[#ngx.req.get_post_args|ngx.req.get_post_args]] function instead if a Lua table is required.
+
+The optional <code>max_bytes</code> function argument can be used when you don't need the entire body.
 
 This function returns <code>nil</code> if
 
@@ -4603,13 +4657,15 @@ See also [[#ngx.req.get_body_data|ngx.req.get_body_data]].
 
 '''syntax:''' ''ngx.req.set_body_data(data)''
 
-'''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*''
+'''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*, balancer_by_lua*''
 
 Set the current request's request body using the in-memory data specified by the <code>data</code> argument.
 
 If the request body has not been read yet, call [[#ngx.req.read_body|ngx.req.read_body]] first (or turn on [[#lua_need_request_body|lua_need_request_body]] to force this module to read the request body. This is not recommended however). Additionally, the request body must not have been previously discarded by [[#ngx.req.discard_body|ngx.req.discard_body]].
 
 Whether the previous request body has been read into memory or buffered into a disk file, it will be freed or the disk file will be cleaned up immediately, respectively.
+
+Note that this function is also work for balancer phase but it needs to call [https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md#recreate_request balancer.recreate_request] to make the change take effect after set the request body data or headers.
 
 This function was first introduced in the <code>v0.3.1rc18</code> release.
 
@@ -4619,7 +4675,7 @@ See also [[#ngx.req.set_body_file|ngx.req.set_body_file]].
 
 '''syntax:''' ''ngx.req.set_body_file(file_name, auto_clean?)''
 
-'''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*''
+'''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*, balancer_by_lua*''
 
 Set the current request's request body using the in-file data specified by the <code>file_name</code> argument.
 
@@ -4630,6 +4686,8 @@ If the optional <code>auto_clean</code> argument is given a <code>true</code> va
 Please ensure that the file specified by the <code>file_name</code> argument exists and is readable by an Nginx worker process by setting its permission properly to avoid Lua exception errors.
 
 Whether the previous request body has been read into memory or buffered into a disk file, it will be freed or the disk file will be cleaned up immediately, respectively.
+
+Note that this function is also work for balancer phase but it needs to call [https://github.com/openresty/lua-resty-core/blob/master/lib/ngx/balancer.md#recreate_request balancer.recreate_request] to make the change take effect after set the request body data or headers.
 
 This function was first introduced in the <code>v0.3.1rc18</code> release.
 
@@ -4707,6 +4765,7 @@ Returns a read-only cosocket object that wraps the downstream connection. Only [
 
 In case of error, <code>nil</code> will be returned as well as a string describing the error.
 
+'''Note:''' This method will block while waiting for client request body to be fully received. Block time depends on the [http://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_timeout client_body_timeout] directive and maximum body size specified by the [http://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size client_max_body_size] directive. If read timeout occurs or client body size exceeds the defined limit, this function will not return and <code>408 Request Time-out</code> or <code>413 Request Entity Too Large</code> response will be returned to the client instead.
 The socket object returned by this method is usually used to read the current request's body in a streaming fashion. Do not turn on the [[#lua_need_request_body|lua_need_request_body]] directive, and do not mix this call with [[#ngx.req.read_body|ngx.req.read_body]] and [[#ngx.req.discard_body|ngx.req.discard_body]].
 
 If any request body data has been pre-read into the Nginx core request header buffer, the resulting cosocket object will take care of this to avoid potential data loss resulting from such pre-reading.
@@ -5197,7 +5256,21 @@ Since the <code>0.9.16</code> release, an optional boolean-typed <code>no_paddin
 
 '''context:''' ''set_by_lua*, rewrite_by_lua*, access_by_lua*, content_by_lua*, header_filter_by_lua*, body_filter_by_lua*, log_by_lua*, ngx.timer.*, balancer_by_lua*, ssl_certificate_by_lua*, ssl_session_fetch_by_lua*, ssl_session_store_by_lua*, ssl_client_hello_by_lua*''
 
-Decodes the <code>str</code> argument as a base64 digest to the raw form. Returns <code>nil</code> if <code>str</code> is not well formed.
+Decodes the <code>str</code> argument as a base64 digest to the raw form.
+The <code>str</code> should be standard 'base64' encoding for RFC 3548 or RFC 4648, and will returns <code>nil</code> if is not well formed or any characters not in the base encoding alphabet.
+
+== ngx.decode_base64mime ==
+'''syntax:''' ''newstr = ngx.decode_base64mime(str)''
+
+'''context:''' ''set_by_lua*, rewrite_by_lua*, access_by_lua*, content_by_lua*, header_filter_by_lua*, body_filter_by_lua*, log_by_lua*, ngx.timer.*, balancer_by_lua*, ssl_certificate_by_lua*, ssl_session_fetch_by_lua*, ssl_session_store_by_lua*''
+
+'''requires:''' <code>resty.core.base64</code> or <code>resty.core</code>
+
+Decodes the <code>str</code> argument as a base64 digest to the raw form.
+The <code>str</code> follows base64 transfer encoding for MIME (RFC 2045), and will discard characters outside the base encoding alphabet.
+Returns <code>nil</code> if <code>str</code> is not well formed.
+
+ '''Note:''' This method requires the <code>resty.core.base64</code> or <code>resty.core</code> modules from the [https://github.com/openresty/lua-resty-core lua-resty-core] library.
 
 == ngx.crc32_short ==
 
@@ -6498,6 +6571,7 @@ This API function was first added to the <code>v0.10.1</code> release.
 
 Creates and returns a TCP or stream-oriented unix domain socket object (also known as one type of the "cosocket" objects). The following methods are supported on this object:
 
+* [[#tcpsock:bind|bind]]
 * [[#tcpsock:connect|connect]]
 * [[#tcpsock:setclientcert|setclientcert]]
 * [[#tcpsock:sslhandshake|sslhandshake]]
@@ -6534,6 +6608,38 @@ Starting from the <code>0.9.9</code> release, the cosocket object here is full-d
 This feature was first introduced in the <code>v0.5.0rc1</code> release.
 
 See also [[#ngx.socket.udp|ngx.socket.udp]].
+
+== tcpsock:bind ==
+'''syntax:''' ''ok, err = tcpsock:bind(address)''
+
+'''context:''' ''rewrite_by_lua*, access_by_lua*, content_by_lua*, ngx.timer.*, ssl_certificate_by_lua*''
+
+Just like the standard [[HttpProxyModule#proxy_bind|proxy_bind]] directive, this api makes the outgoing connection to a upstream server originate from the specified local IP address.
+
+Only IP addresses can be specified as the <code>address</code> argument.
+
+Here is an example for connecting to a TCP server from the specified local IP address:
+
+<geshi lang="nginx">
+    location /test {
+        content_by_lua_block {
+            local sock = ngx.socket.tcp()
+            -- assume "192.168.1.10" is the local ip address
+            local ok, err = sock:bind("192.168.1.10")
+            if not ok then
+                ngx.say("failed to bind")
+                return
+            end
+            local ok, err = sock:connect("192.168.1.67", 80)
+            if not ok then
+                ngx.say("failed to connect server: ", err)
+                return
+            end
+            ngx.say("successfully connected!")
+            sock:close()
+        }
+    }
+</geshi>
 
 == tcpsock:connect ==
 
@@ -7709,6 +7815,13 @@ This function returns a Lua number for the process ID (PID) of the current Nginx
 
 This API was first introduced in the <code>0.9.5</code> release.
 
+== ngx.worker.pids ==
+
+'''syntax:''' ''pid = ngx.worker.pids()''
+
+'''context:''' ''set_by_lua*, rewrite_by_lua*, access_by_lua*, content_by_lua*, header_filter_by_lua*, body_filter_by_lua*, log_by_lua*, ngx.timer.*, exit_worker_by_lua*''
+
+This function returns a Lua table for all Nginx worker process ID (PID). Nginx uses channel to send the current worker PID to another worker in the worker process start or restart. So this API can get all current worker PID.
 == ngx.worker.count ==
 
 '''syntax:''' ''count = ngx.worker.count()''
